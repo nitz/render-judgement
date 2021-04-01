@@ -52,36 +52,26 @@ export class Judgement {
 		try {
 			let target = this.settings.target_sub;
 
-			if (!this.latest_seen[target]) {
-				this.latest_seen[target] = 0;
-			}
-
 			await this.getMods(target);
 
-			let judgements_made = 0;
-
 			console.log(`Checking to judge /r/${target}`);
-			console.log(`Latest comment seen: ${this.latest_seen[target]}`);
 
-			this.reddit.getNewComments(target).then(async comments => {
-				for (let scan = comments.length - 1; scan >= 0; --scan) {
-					let comment = comments[scan];
+			let sub = this.reddit.getSubreddit(target);
 
-					if (comment.created_utc <= this.latest_seen[target]) {
-						continue;
-					}
+			let s = sub.getNew().then(async submissions => {
+				return await this.judiciumDivinum(submissions, target, 'submission');
+			});
 
-					if (await this.issueDivineJudgement(comment)) {
-						judgements_made++;
-					}
+			let c = sub.getNewComments(target).then(async comments => {
+				return await this.judiciumDivinum(comments, target, 'comment');
+			});
 
-					if (comment.created_utc > this.latest_seen[target]) {
-						this.latest_seen[target] = comment.created_utc;
-					}
-				}
-			}).then(() => {
-				if (judgements_made > 0) {
-					console.log(`Judgements issued: ${judgements_made}`)
+			let retribution = [s, c];
+
+			Promise.all(retribution).then(judgements => {
+				let total_judgements = judgements.reduce((a, b) => a + b, 0);
+				if (total_judgements > 0) {
+					console.log(`Judgements issued: ${total_judgements}`)
 				} else {
 					console.log(`Done checking, no new judgements.`);
 				}
@@ -92,14 +82,49 @@ export class Judgement {
 		}
 	}
 
-	async issueDivineJudgement(comment: snoowrap.Comment): Promise<boolean> {
-		let user = comment.author;
-		let sub = comment.subreddit;
+	// judgement is imminent!
+	async judiciumDivinum<T extends snoowrap.VoteableContent<T>>(
+		listing: snoowrap.Listing<T>,
+		target: string,
+		seen_type: string) {
+		let judgements_made = 0;
+		const seen_key = `${target}.${seen_type}`;
+
+		if (!this.latest_seen[seen_key]) {
+			this.latest_seen[seen_key] = 0;
+		}
+
+		let ts = new Date(this.latest_seen[seen_key]).toString();
+		console.log(`Latest ${seen_type} seen: ${ts}`);
+
+		for (let scan = listing.length - 1; scan >= 0; --scan) {
+			let content = listing[scan];
+
+			if (content.created_utc <= this.latest_seen[seen_key]) {
+				continue;
+			}
+
+			if (await this.issueDivineJudgement(content, seen_type)) {
+				judgements_made++;
+			}
+
+			if (content.created_utc > this.latest_seen[seen_key]) {
+				this.latest_seen[seen_key] = content.created_utc;
+			}
+		}
+
+		return judgements_made;
+	}
+
+	// glorious retribution has arrived!
+	async issueDivineJudgement<T>(content: snoowrap.VoteableContent<T>, type: string): Promise<boolean> {
+		let user = content.author;
+		let sub = content.subreddit;
 		let sub_id = sub.id;
-		let sub_name_raw = comment.subreddit.display_name;
-		let sub_name = comment.subreddit_name_prefixed;
+		let sub_name_raw = content.subreddit.display_name;
+		let sub_name = content.subreddit_name_prefixed;
 		let new_flair = this.generateFlair(user.name, this.settings.hash_salt);
-		let key = this.getUserKey(comment);
+		let key = this.getUserKey(content);
 		let mods = await this.getMods(sub_name);
 
 		if (mods.includes(user.name)) {
@@ -111,7 +136,7 @@ export class Judgement {
 		let user_data = await this.database.findOne('users/flair', { key: key });
 
 		if (current_flair.flair_css_class === new_flair.css_class) {
-			console.log(`${user.name} judgement already rendered.`);
+			console.log(`${user.name} judgement already rendered.  (${type})`);
 			return false;
 		}
 
@@ -123,7 +148,7 @@ export class Judgement {
 			console.log(`**DRY_RUN** JUDGING: ${sub_name}/${user.name} flair: ${new_flair.text}`);
 			return true;
 		} else {
-			console.log(`JUDGING: ${sub_name}/${user.name} flair: ${new_flair.text}`);
+			console.log(`JUDGING: ${sub_name}/${user.name} flair: ${new_flair.text} (${type})`);
 		}
 
 		// they haven't been judged. store their current flair, and JUDGE THEM
@@ -144,8 +169,8 @@ export class Judgement {
 		return true;
 	}
 
-	getUserKey(comment: snoowrap.Comment): string {
-		return `${comment.subreddit_id}/${comment.author.name}`;
+	getUserKey<T>(content: snoowrap.VoteableContent<T>): string {
+		return `${content.subreddit_id}/${content.author.name}`;
 	}
 
 	async dbCreateOrUpdate(table: string, data: any) {
