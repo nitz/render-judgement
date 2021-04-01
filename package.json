@@ -1,0 +1,34 @@
+{
+    "private": true,
+    "version": "1.0.0",
+    "description": "Sets flairs of users as they comment on a specific subreddit with a result based on a hash of their username.",
+    "main": "index.ts",
+    "keywords": [
+        "send",
+        "help",
+        "trapped",
+        "in",
+        "keyword",
+        "factory"
+    ],
+    "author": {
+        "name": "cmd",
+        "url": "https://cmd.wtf/"
+    },
+    "license": "GPL-3.0-only",
+    "scripts": {
+        "start": "npm run build && node .",
+        "build": "tsc -b ./Judgement/",
+        "test": "echo \"Error: no tests specified!\" && exit 1"
+    },
+    "dependencies": {
+        "@fwd/database": "^0.1.4",
+        "@fwd/server": "^1.1.3",
+        "dotenv": "^8.2.0",
+        "getenv": "^1.0.0",
+        "snoowrap": "^1.22.0"
+    },
+    "devDependencies": {
+        "typescript": "^4.2.3"
+    }
+}

@@ -1,0 +1,5 @@
+.env
+database.json
+*.csv
+node_modules
+/Judgement/index.js
